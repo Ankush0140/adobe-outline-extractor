@@ -1,5 +1,5 @@
 # Directory: src/extractors/rfp.py
-from utils import clean
+from .utils import clean
 
 def extract_title(doc):
     text = doc.load_page(0).get_text()

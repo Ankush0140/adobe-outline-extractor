@@ -1,6 +1,5 @@
 # Directory: src/extractors/invitation.py
-from utils import clean
-
+from .utils import clean  
 def extract_title(doc):
     return "RSVP: ----------------"
 

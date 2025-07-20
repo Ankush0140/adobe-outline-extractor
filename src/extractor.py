@@ -1,4 +1,4 @@
-from utils import detect_pdf_type
+from src.extractors.utils import detect_pdf_type
 from extractors.form import extract_form_outline
 from extractors.flyer import extract_flyer_outline
 from extractors.document import extract_document_outline

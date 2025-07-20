@@ -1,5 +1,5 @@
 # src/extractors/form.py
-from utils import clean
+from .utils import clean  
 from collections import defaultdict
 
 def extract_title(doc):
