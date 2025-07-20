@@ -4,4 +4,7 @@
 
 Build:
 ```bash
-docker build --platform linux/amd64 -t outline-extractor .
+docker build -t pdf-processor .
+
+
+docker run --rm -v "%cd%/input:/app/input:ro" -v "%cd%/output:/app/output" --network none pdf-processor
