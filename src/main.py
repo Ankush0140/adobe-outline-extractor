@@ -1,6 +1,7 @@
 # Directory: src/main.py
 import fitz
 import json
+import inspect
 from pathlib import Path
 from detect_type import detect_pdf_type
 
@@ -24,8 +25,16 @@ def process_pdfs():
             doc = fitz.open(pdf_path)
             pdf_type = detect_pdf_type(doc)
             extractor = type_to_extractor.get(pdf_type, structured)
+            # title = extractor.extract_title(doc)
+            # outline = extractor.extract_outline(doc)
             title = extractor.extract_title(doc)
-            outline = extractor.extract_outline(doc)
+
+# Dynamically detect whether extract_outline accepts a title argument
+            outline_func = extractor.extract_outline
+            if len(inspect.signature(outline_func).parameters) == 2:
+                outline = outline_func(doc, title)
+            else:
+                outline = outline_func(doc)
             output_data = {"title": title, "outline": outline}
             with open(output_dir / f"{pdf_path.stem}.json", "w", encoding="utf-8") as f:
                 json.dump(output_data, f, indent=2)
