@@ -1,1 +1,2 @@
 PyMuPDF==1.23.7
+symspellpy==6.7.7
