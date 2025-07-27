@@ -5,12 +5,19 @@ import fitz
 import inspect
 from pathlib import Path
 from detect_type import detect_pdf_type
-from extractors import form, rfp, invitation, poster, structured
+from extractors import (
+    form, form_multilang,
+    rfp, rfp_multi,
+    invitation, invitation_multi,
+    poster, poster_multi,
+    structured, structured_multi
+)
 
 # ---- Constraints ----
 MAX_PAGES = 50
 MAX_SECONDS_PER_PDF = 10.0
 
+# default extractors
 type_to_extractor = {
     "form": form,
     "rfp": rfp,
@@ -18,6 +25,22 @@ type_to_extractor = {
     "invitation": invitation,
     "structured_document": structured
 }
+
+# multilingual extractors
+type_to_extractor_multi = {
+    "form": form_multilang,
+    "rfp": rfp_multi,
+    "poster": poster_multi,
+    "invitation": invitation_multi,
+    "structured_document": structured_multi
+}
+
+def has_devanagari_or_telugu(text: str) -> bool:
+    for ch in text:
+        oc = ord(ch)
+        if 0x0900 <= oc <= 0x097F or 0x0C00 <= oc <= 0x0C7F:  # Devanagari / Telugu
+            return True
+    return False
 
 def process_pdfs():
     input_dir = Path("/app/input")
@@ -36,7 +59,20 @@ def process_pdfs():
                 continue
 
             pdf_type = detect_pdf_type(doc)
+
+            # pick default extractor
             extractor = type_to_extractor.get(pdf_type, structured)
+
+            # multilingual switch (cheap – only first page sampled)
+            sample_text = ""
+            if len(doc) > 0:
+                try:
+                    sample_text = doc.load_page(0).get_text()
+                except Exception:
+                    sample_text = ""
+
+            if has_devanagari_or_telugu(sample_text):
+                extractor = type_to_extractor_multi.get(pdf_type, structured_multi)
 
             # Title
             title = extractor.extract_title(doc)
@@ -58,7 +94,9 @@ def process_pdfs():
             with open(output_dir / f"{pdf_path.stem}.json", "w", encoding="utf-8") as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-            print(f"Processed {pdf_path.name} as {pdf_type} in {elapsed:.2f}s")
+            print(f"Processed {pdf_path.name} as {pdf_type} "
+                  f"({'multi' if extractor in type_to_extractor_multi.values() else 'default'}) "
+                  f"in {elapsed:.2f}s")
 
             doc.close()
 
