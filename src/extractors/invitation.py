@@ -1,5 +1,4 @@
 from .utils import clean
-import fitz
 
 def extract_title(doc):
     first_page = doc.load_page(0)
@@ -54,45 +53,6 @@ def extract_title(doc):
     # Join title lines with separator
     return " | ".join(title_lines) if title_lines else "Untitled Invitation"
 
-# def extract_outline(doc):
-#     """Extract structured headings based on visual and positional features."""
-#     outline = []
-
-#     for page_num in range(len(doc)):
-#         page = doc.load_page(page_num)
-#         blocks = page.get_text("dict")["blocks"]
-#         page_width = page.rect.width
-
-#         for block in blocks:
-#             if "lines" not in block:
-#                 continue
-#             for line in block["lines"]:
-#                 line_text = " ".join([span["text"] for span in line["spans"]]).strip()
-#                 if not line_text:
-#                     continue
-
-#                 span = line["spans"][0]
-#                 font_size = span["size"]
-#                 x0, x1 = line["bbox"][0], line["bbox"][2]
-#                 center_offset = abs((x0 + x1) / 2 - page_width / 2)
-
-#                 # Heuristic heading level based on font size and position
-#                 if font_size >= 20 and center_offset < page_width * 0.15:
-#                     level = "H1"
-#                 elif font_size >= 14:
-#                     level = "H2"
-#                 elif font_size >= 11:
-#                     level = "H3"
-#                 else:
-#                     level = "H4"
-
-#                 outline.append({
-#                     "level": level,
-#                     "text": clean(line_text),
-#                     "page": page_num
-#                 })
-
-#     return outline
 def extract_outline(doc):
     outline = []
     for page_num in range(len(doc)):
@@ -108,4 +68,3 @@ def extract_outline(doc):
                 # If you just want the first occurrence, break here:
                 # return outline
     return outline
-

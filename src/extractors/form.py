@@ -1,6 +1,5 @@
 # src/extractors/form.py
 from .utils import clean  
-from collections import defaultdict
 
 def extract_title(doc):
     page = doc.load_page(0)

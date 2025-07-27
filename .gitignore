@@ -142,14 +142,10 @@ docker-compose.override.yaml
 *.temp
 temp/
 tmp/
-input/
-output/
-*.pdf
 
 # Output files that might be large
 *.json.bak
 *.json.tmp
-*.json
 outputs/temp/
 processed/
 
@@ -185,6 +181,59 @@ pids
 coverage/
 *.lcov
 
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.test
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
 # Temporary folders
 tmp/
 temp/
@@ -218,4 +267,4 @@ temp/
 # Configuration files with sensitive data
 config.ini
 secrets.json
-credentials.json
+credentials.json 

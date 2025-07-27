@@ -1,163 +1,230 @@
-import fitz  # PyMuPDF
+# src/extractors/rfp.py
 import re
-from collections import Counter, defaultdict
-from .utils import is_heading_like, clean
+from collections import Counter
+from .utils import clean, is_heading_like,  is_date_line
 
-DATE_PATTERN = re.compile(
-    r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b",
-    re.IGNORECASE
-)
 
-def extract_first_page_lines(doc):
+# ---- Noise detection ----
+def is_noisy_line(text: str) -> bool:
+    if not text or len(text.strip()) < 5:
+        return True
+    tokens = text.split()
+    if len(tokens) < 2:
+        return True
+    # Too many short tokens (OCR noise like "r Pr", "quest f")
+    short_tokens = sum(len(t) <= 2 for t in tokens)
+    if short_tokens / len(tokens) > 0.4:
+        return True
+    # Repeated characters (like "Reeeequest")
+    if re.search(r"(.)\1{2,}", text):
+        return True
+    return False
+
+# ---- Extract Title ----
+def extract_title(doc):
     if len(doc) == 0:
-        return []
-    text = doc.load_page(0).get_text()
-    return [clean(line) for line in text.split("\n") if line.strip()]
-
-def extract_title(doc) -> str:
-    """
-    Extract a highly accurate, de-noised title block from the first page.
-    This version avoids hardcoding and handles noisy/repeated span artifacts.
-    """
-    if len(doc) == 0:
-        return "No Title Found"
+        return "Untitled RFP"
 
     page = doc.load_page(0)
     height = page.rect.height
     blocks = page.get_text("dict")["blocks"]
 
-    title_lines = []
-
+    candidates = []
     for block in blocks:
         if "lines" not in block:
             continue
         for line in block["lines"]:
-            y_coord = line["bbox"][1]
-            if y_coord > height * 0.4:
-                continue  # bottom content, probably body
-
-            text = clean(" ".join(span.get("text", "") for span in line["spans"])).strip()
-            if not text or len(text.split()) < 2:
+            y_top = line["bbox"][1]
+            if y_top > height * 0.4:  # Focus on top 40% of page
                 continue
+            spans = line.get("spans", [])
+            if not spans:
+                continue
+            text = clean(" ".join(span.get("text", "") for span in spans)).strip()
+            if not text or is_noisy_line(text):
+                continue
+            size = max(span.get("size", 0) for span in spans)
+            candidates.append((y_top, size, text))
 
-            size = max(span["size"] for span in line["spans"])
-            font = " ".join(span["font"] for span in line["spans"]).lower()
+    if not candidates:
+        return "Untitled RFP"
 
-            if is_heading_like(text, font, size) or size >= 11.0:
-                title_lines.append((y_coord, text, size))
+    # Sort by vertical position and keep large font lines
+    candidates.sort(key=lambda x: x[0])
+    max_size = max(s for _, s, _ in candidates)
+    title_lines = [t for _, s, t in candidates if s >= max_size - 1]
 
-    if not title_lines:
-        return "No Title Found"
+    return " ".join(title_lines) if title_lines else "Untitled RFP"
 
-    # Group lines with similar font sizes (within 1pt) and top positions
-    title_lines.sort(key=lambda x: x[0])  # sort by vertical position
+# src/extractors/rfp.py
+import re
+from collections import Counter
+from .utils import clean, is_heading_like  # keep your existing utils
 
-    final_tokens = []
-    seen_words = set()
-    previous_size = None
-    for _, line_text, size in title_lines:
-        if previous_size and abs(previous_size - size) > 1:
-            break  # font size dropped → likely end of title
-        previous_size = size
-        for word in line_text.strip().split():
-            lw = word.lower()
-            if len(lw) > 2 and lw not in seen_words:
-                final_tokens.append(word)
-                seen_words.add(lw)
+DATE_PATTERN = re.compile(
+    r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)"
+    r"(?:\s+\d{1,2})?(?:,?\s+\d{4})?\b",
+    re.IGNORECASE
+)
 
-    title = " ".join(final_tokens)
-    return title[:200] if title else "No Title Found"
+def _is_date(text: str) -> bool:
+    # Match any month name with optional day and year (e.g., "March 2003" or "April 21, 2003")
+    if DATE_PATTERN.search(text):
+        return True
+    # Match simple numeric dates like "21/03/2003" or "03-21-03"
+    if re.search(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", text):
+        return True
+    # "Timeline: March 2003 – September 2003" → treat as date-like
+    if "timeline" in text.lower() and any(month in text.lower() for month in [
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december"
+    ]):
+        return True
+    return False
 
-def extract_rfp_identifier(lines):
-    pattern = re.compile(r"\b(RFP|RFQ|RFI)[\s:\-#]*[A-Z0-9_\-/]+", re.IGNORECASE)
-    for line in lines:
-        match = pattern.search(line)
-        if match:
-            return clean(match.group())
-    return ''
+def _is_noise(text: str) -> bool:
+    text = text.strip()
+    if not text:
+        return True
+    if _is_date(text):
+        return True
+    if len(text) < 3:
+        return True
+    words = text.split()
+    if sum(1 for w in words if len(w) <= 2) > 2:
+        return True
+    if re.search(r'(.)\1{2,}', text.lower()):
+        return True
+    if re.match(r'^[^a-zA-Z]+$', text):
+        return True
+    if len(words) > 20:
+        return True
+    return False
 
-def extract_date(lines):
-    for line in lines:
-        match = DATE_PATTERN.search(line)
-        if match:
-            return match.group()
-    return ''
 
-def extract_organization(lines):
-    # No hardcoded organization names; use generic "organization-like" word triggers only if necessary
-    for line in lines:
-        if re.search(r"(library|institute|department|city|association)", line, re.IGNORECASE):
-            return line
-    return ''
+def _find_title_anchor(doc, title: str):
+    """
+    Find the y-coordinate right after the title. We’ll ignore anything above this on that page.
+    Fallback: 40% of the first page.
+    """
+    norm_title = re.sub(r'\s+', ' ', title or '').strip().lower()
+    if not norm_title:
+        return 0, doc.load_page(0).rect.height * 0.4
 
-def extract_purpose(lines):
-    for line in lines:
-        if line.lower().strip().startswith("the purpose"):
-            return line.strip()
-    return ''
+    for p in range(min(3, len(doc))):  # usually in the first pages
+        page = doc.load_page(p)
+        blocks = page.get_text("dict")["blocks"]
+        for block in blocks:
+            for line in block.get("lines", []):
+                spans = line.get("spans", [])
+                line_text = clean(" ".join(span.get("text", "") for span in spans))
+                if norm_title in line_text.lower():
+                    # return the bottom (bbox[3]) of the title line
+                    return p, line["bbox"][3]
 
-def extract_features(doc):
-    lines = extract_first_page_lines(doc)
-    return {
-        "title": extract_title(doc),
-        "organization": extract_organization(lines),
-        "rfp_identifier": extract_rfp_identifier(lines),
-        "date": extract_date(lines),
-        "purpose": extract_purpose(lines)
-    }
+    return 0, doc.load_page(0).rect.height * 0.4
 
-def extract_outline(doc, title=None):
-    spans_all = []
-    line_freq = defaultdict(int)
+def _merge_adjacent_headings(lines, max_gap=30, max_size_diff=1.2):
+    """
+    Merge consecutive lines that belong to the same visual heading (same page, near vertically,
+    and similar font size).
+    """
+    if not lines:
+        return []
 
-    # Phase 1: Collect all candidate heading-like lines
-    for page_num in range(len(doc)):
+    # sort by (page, y)
+    lines.sort(key=lambda x: (x["page"], x["y"]))
+
+    merged = []
+    buf = [lines[0]]
+
+    for cur in lines[1:]:
+        prev = buf[-1]
+        same_page = cur["page"] == prev["page"]
+        close_y = abs(cur["y"] - prev["y"]) <= max_gap
+        size_ratio = (max(cur["size"], prev["size"]) / max(min(cur["size"], prev["size"]), 0.1))
+        close_size = size_ratio <= max_size_diff
+
+        if same_page and close_y and close_size:
+            buf.append(cur)
+        else:
+            merged.append({
+                "text": " ".join(x["text"] for x in buf).strip(),
+                "size": buf[0]["size"],
+                "page": buf[0]["page"]
+            })
+            buf = [cur]
+
+    merged.append({
+        "text": " ".join(x["text"] for x in buf).strip(),
+        "size": buf[0]["size"],
+        "page": buf[0]["page"]
+    })
+    return merged
+
+def extract_outline(doc, title: str):
+    start_page, start_y = _find_title_anchor(doc, title)
+    raw = []
+
+    for page_num in range(start_page, len(doc)):
         page = doc.load_page(page_num)
         blocks = page.get_text("dict")["blocks"]
+
         for block in blocks:
             if "lines" not in block:
                 continue
-            for line in block.get("lines", []):
-                spans = line.get("spans", [])
-                text = clean(" ".join(span.get("text", "") for span in spans)).strip()
-                if not text or len(text.split()) <= 1 or len(text.split()) > 25:
+
+            for line in block["lines"]:
+                # skip anything before the title on the start page
+                if page_num == start_page and line["bbox"][1] <= start_y:
                     continue
 
-                line_freq[text.lower()] += 1
+                spans = line.get("spans", [])
+                if not spans:
+                    continue
 
-                max_size = max(span["size"] for span in spans)
-                font = " ".join(span["font"] for span in spans).lower()
+                text = clean(" ".join(span.get("text", "") for span in spans)).strip()
+                if not text:
+                    continue
 
-                if is_heading_like(text, font, max_size):
-                    spans_all.append({
+                # kill title repeats, dates, noise
+                if (title and title.lower() in text.lower()) or _is_noise(text):
+                    continue
+
+                size = max(span.get("size", 0.0) for span in spans)
+                font = " ".join(span.get("font", "") for span in spans).lower()
+
+                if is_heading_like(text, font, size):
+                    raw.append({
                         "text": text,
-                        "size": round(max_size, 1),
+                        "size": round(size, 1),
+                        "y": line["bbox"][1],
                         "page": page_num
                     })
 
-    # Phase 2: Filter out repeated/junky lines by occurrence threshold (e.g., headers/footers)
-    unique_spans = []
-    seen = set()
-    for span in spans_all:
-        t = span["text"].lower()
-        if span["text"] not in seen and line_freq[t] <= 2 and (not title or title.lower() not in t):
-            seen.add(span["text"])
-            unique_spans.append(span)
-    if not unique_spans:
+    if not raw:
         return []
 
-    font_counts = Counter(s['size'] for s in unique_spans)
-    sorted_sizes = sorted(font_counts.items(), key=lambda item: -item[1])
-    font_to_level = {}
-    for i, (size, _) in enumerate(sorted_sizes):
-        font_to_level[size] = "H1" if i == 0 else ("H2" if i == 1 else ("H3" if i == 2 else "H4"))
+    # merge broken headings split across lines
+    merged = _merge_adjacent_headings(raw)
+
+    # dedupe (keep first occurrence per page)
+    seen = set()
+    uniq = []
+    for c in merged:
+        key = (c["text"].lower(), c["page"])
+        if key not in seen:
+            seen.add(key)
+            uniq.append(c)
+
+    # sizes -> H1..H4 (largest font = H1)
+    unique_sizes = sorted({c["size"] for c in uniq}, reverse=True)
+    levels = ["H1", "H2", "H3", "H4"]
+    size_to_level = {sz: levels[min(i, len(levels) - 1)] for i, sz in enumerate(unique_sizes)}
 
     outline = [
-        {
-            "level": font_to_level.get(span["size"], "H4"),
-            "text": span["text"],
-            "page": span["page"]
-        }
-        for span in unique_spans
+        {"level": size_to_level.get(c["size"], "H4"), "text": c["text"], "page": c["page"]}
+        for c in uniq
     ]
+
     return outline

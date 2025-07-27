@@ -1,6 +1,5 @@
 # Refined version of structured.py (with bug fixes)
 from .utils import clean, clean_text, is_toc_line, is_metadata_line, is_repeated_line, is_heading_like
-import fitz  # PyMuPDF
 import re
 from collections import defaultdict, Counter
 
