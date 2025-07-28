@@ -61,12 +61,12 @@ When executed, the app will:
 
 ### 🔧 Build Docker Image
 
-```bash
+
 docker build -t pdf-processor .
 
 ### 🔧 Run Docker Image
 
-```bash
+
 docker run --rm -v "%cd%/input:/app/input:ro" -v "%cd%/output:/app/output" --network none pdf-processor
 
 
