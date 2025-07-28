@@ -71,6 +71,9 @@ docker run --rm -v "%cd%/input:/app/input:ro" -v "%cd%/output:/app/output" --net
 
 
 🗂️ Directory Structure
+
+```bash
+
 .
 ├── input/                 # Folder containing test PDFs
 ├── output/                # Output folder for JSON results
