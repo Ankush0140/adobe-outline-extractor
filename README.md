@@ -1,4 +1,4 @@
-# Adobe Outline Extractor 📝
+# Round 1A Challenge 📝
 
 This project is a multilingual PDF parser designed for the Adobe India Hackathon 2025. It extracts structured outlines and titles from diverse types of PDFs — including forms, invitations, posters, RFPs, and structured documents. It supports both English and regional languages like Hindi and Telugu.
 
